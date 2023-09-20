@@ -15,17 +15,18 @@ class PresentationManager(object):
         self.presentation = Presentation(file_path)
         # Setting index of slide to be used as a template
         self.template_slide_index = template_slide_index
+        # Get index of Blank slide layout
+        layout_items_count = [len(layout.placeholders) for layout in self.presentation.slide_layouts]
+        min_items = min(layout_items_count)
+        self.blank_layout_id = layout_items_count.index(min_items)
 
     @property
     def xml_slides(self):
         return self.presentation.slides._sldIdLst
 
-    def _get_blank_slide_layout(self):
-        layout_items_count = [len(layout.placeholders) for layout in self.presentation.slide_layouts]
-        min_items = min(layout_items_count)
-        blank_layout_id = layout_items_count.index(min_items)
-        
-        return self.presentation.slide_layouts[blank_layout_id]
+    @property
+    def _get_blank_slide_layout(self):        
+        return self.presentation.slide_layouts[self.blank_layout_id]
 
     def duplicate_slide(self, index):
         """
