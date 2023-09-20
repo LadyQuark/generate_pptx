@@ -10,9 +10,14 @@ class PresentationManager(object):
     # Character limit for content text in single slide
     MAX_CONTENT_LIMIT=2250
 
-    def __init__(self, file_path, template_slide_index=1):
+    def __init__(self, file_path=None, template_slide_index=1):
         # Since presentation.Presentation class not intended to be constructed directly, using pptx.Presentation() to open presentation
-        self.presentation = Presentation(file_path)
+        if not file_path:
+            self.presentation = Presentation()
+            print("New presentation object loaded")
+        elif Path(file_path).exists():
+            self.presentation = Presentation(file_path)
+            print("Loaded presentation from:", file_path)
         # Setting index of slide to be used as a template
         self.template_slide_index = template_slide_index
         # Get index of Blank slide layout
@@ -28,14 +33,15 @@ class PresentationManager(object):
     def _get_blank_slide_layout(self):        
         return self.presentation.slide_layouts[self.blank_layout_id]
 
-    def duplicate_slide(self, index):
+    def duplicate_slide(self, index, destination=None):
         """
         Duplicates the slide with the given index. Adds slide to the end of the presentation
         """
         source = self.presentation.slides[index]
+        destination = destination or self
         # Adds blank slide to end
-        blank_slide_layout = self._get_blank_slide_layout()
-        dest = self.presentation.slides.add_slide(blank_slide_layout)
+        blank_slide_layout = destination._get_blank_slide_layout
+        dest = destination.presentation.slides.add_slide(blank_slide_layout)
 
         # Creates empty list and empty folder `temp` in project
         images = {}
@@ -64,6 +70,9 @@ class PresentationManager(object):
                 dest.shapes._spTree.insert_element_before(newel, 'p:extLst')
 
         return dest
+
+    def copy_slide_to_other_presentation(self, index, destination):
+        return self.duplicate_slide(index=index, destination=destination)
 
     def move_slide(self, old_index, new_index):
         slides = list(self.xml_slides)
@@ -128,5 +137,6 @@ class PresentationManager(object):
             print("Removing template", self.template_slide_index)
             self.remove_slide(self.template_slide_index)
         self.presentation.save(filepath)
+        print("Saved presentation to:", filepath)
 
 
