@@ -18,8 +18,12 @@ class PresentationManager(object):
         elif Path(file_path).exists():
             self.presentation = Presentation(file_path)
             print("Loaded presentation from:", file_path)
+        else:
+            raise Exception(f"Could not load {file_path}")  
+
         # Setting index of slide to be used as a template
         self.template_slide_index = template_slide_index
+
         # Get index of Blank slide layout
         layout_items_count = [len(layout.placeholders) for layout in self.presentation.slide_layouts]
         min_items = min(layout_items_count)
@@ -30,8 +34,12 @@ class PresentationManager(object):
         return self.presentation.slides._sldIdLst
 
     @property
-    def _get_blank_slide_layout(self):        
+    def _blank_slide_layout(self):        
         return self.presentation.slide_layouts[self.blank_layout_id]
+    
+    @property
+    def total_slides(self):
+        return len(self.presentation.slides)
 
     def duplicate_slide(self, index, destination=None):
         """
@@ -40,7 +48,7 @@ class PresentationManager(object):
         source = self.presentation.slides[index]
         destination = destination or self
         # Adds blank slide to end
-        blank_slide_layout = destination._get_blank_slide_layout
+        blank_slide_layout = destination._blank_slide_layout
         dest = destination.presentation.slides.add_slide(blank_slide_layout)
 
         # Creates empty list and empty folder `temp` in project
@@ -82,6 +90,11 @@ class PresentationManager(object):
     def remove_slide(self, index):
         slides = list(self.xml_slides)
         self.xml_slides.remove(slides[index]) 
+
+    def remove_all_slides(self):
+        slides = list(self.xml_slides)
+        for slide in slides:
+            self.xml_slides.remove(slide)       
         
 
     def add_text_to_slide(self, index, text_content, title=""):
@@ -129,6 +142,7 @@ class PresentationManager(object):
         for old_index in duplicate_indices:
             self.move_slide(old_index, new_index)
             new_index += 1
+
 
     def save(self, filepath, remove_template=True):
         """Saves presentation to given filepath and removes slide used as template"""
