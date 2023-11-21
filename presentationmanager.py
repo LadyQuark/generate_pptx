@@ -1,4 +1,6 @@
 from pptx import Presentation
+from pptx.shapes.graphfrm import GraphicFrame
+from pptx.shapes.picture import Picture
 import os
 import copy
 from pathlib import Path
@@ -72,7 +74,7 @@ class PresentationManager(object):
 
         # Add all other slide elements
         for shp in source.shapes:
-            if 'Picture' not in shp.name:
+            if not isinstance(shp, Picture) and not isinstance(shp, GraphicFrame):
                 el = shp.element
                 newel = copy.deepcopy(el)
                 dest.shapes._spTree.insert_element_before(newel, 'p:extLst')
