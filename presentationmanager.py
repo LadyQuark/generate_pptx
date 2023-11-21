@@ -1,10 +1,9 @@
 import os
 import copy
 import tempfile
+import traceback
 from pptx import Presentation
-from pptx.shapes.graphfrm import GraphicFrame
-from pptx.shapes.picture import Picture
-from pptx.shapes.group import GroupShape
+from utils import duplicate_slide
 from pathlib import Path
 from common import create_text_chunks
 
@@ -45,57 +44,20 @@ class PresentationManager(object):
     def total_slides(self):
         return len(self.presentation.slides)
 
-    def duplicate_slide(self, index, destination=None):
+    def duplicate(self, index, destination=None):
         """
         Duplicates the slide with the given index. Adds slide to the end of the presentation
         """
-        source = self.presentation.slides[index]
         destination = destination or self
-        # Adds blank slide to end
-        blank_slide_layout = destination._blank_slide_layout
-        dest = destination.presentation.slides.add_slide(blank_slide_layout)
+        try:
+            duplicate_slide(self.presentation, index, destination.presentation)
+        except Exception:
+            traceback.print_exc()
 
-        # Creates empty list and empty folder `temp` in project
-        images = {}
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            for shp in source.shapes:
-
-                if isinstance(shp, GroupShape):
-                    for grp_shape in shp.shapes:
-                        if isinstance(grp_shape, Picture):
-                            # Save image
-                            filepath = os.path.join(tmpdirname, grp_shape.name+'.jpg')
-                            with open(filepath, 'wb') as f:
-                                f.write(grp_shape.image.blob)
-                            # Add image path and size to dict `images`
-                            images[filepath] = [grp_shape.left, grp_shape.top, grp_shape.width, grp_shape.height]                        
-
-                if isinstance(shp, Picture):
-                    # Save image
-                    filepath = os.path.join(tmpdirname, shp.name+'.jpg')
-                    with open(filepath, 'wb') as f:
-                        f.write(shp.image.blob)
-                    # Add image path and size to dict `images`
-                    images[filepath] = [shp.left, shp.top, shp.width, shp.height]
-
-                
-
-                
-                # Add all other slide elements
-                if not isinstance(shp, GraphicFrame):
-                    el = shp.element
-                    newel = copy.deepcopy(el)
-                    dest.shapes._spTree.insert_element_before(newel, 'p:extLst')
-        
-            # Add images to new slide and remove from filesystem
-            for k, v in images.items():
-                dest.shapes.add_picture(k, v[0], v[1], v[2], v[3])
-
-        return dest
+        return
 
     def copy_slide_to_other_presentation(self, index, destination):
-        return self.duplicate_slide(index=index, destination=destination)
+        return self.duplicate(index=index, destination=destination)
 
     def move_slide(self, old_index, new_index):
         slides = list(self.xml_slides)
@@ -159,7 +121,7 @@ class PresentationManager(object):
             new_index += 1
 
 
-    def save(self, filepath, remove_template=True):
+    def save(self, filepath, remove_template=False):
         """Saves presentation to given filepath and removes slide used as template"""
 
         if remove_template:
