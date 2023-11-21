@@ -1,8 +1,10 @@
+import os
+import copy
+import tempfile
 from pptx import Presentation
 from pptx.shapes.graphfrm import GraphicFrame
 from pptx.shapes.picture import Picture
-import os
-import copy
+from pptx.shapes.group import GroupShape
 from pathlib import Path
 from common import create_text_chunks
 
@@ -55,29 +57,40 @@ class PresentationManager(object):
 
         # Creates empty list and empty folder `temp` in project
         images = {}
-        temp_folder = "temp"
-        Path(temp_folder).mkdir(parents=True, exist_ok=True)
-        # all images in slide
-        for shp in source.shapes:
-            if 'Picture' in shp.name:
-                # Save image to folder `temp`
-                filepath = os.path.join(temp_folder, shp.name+'.jpg')
-                with open(filepath, 'wb') as f:
-                    f.write(shp.image.blob)
-                # Add image path and size to dict `images`
-                images[filepath] = [shp.left, shp.top, shp.width, shp.height]
-        
-        # Add images to new slide and remove from filesystem
-        for k, v in images.items():
-            dest.shapes.add_picture(k, v[0], v[1], v[2], v[3])
-            os.remove(k)
 
-        # Add all other slide elements
-        for shp in source.shapes:
-            if not isinstance(shp, Picture) and not isinstance(shp, GraphicFrame):
-                el = shp.element
-                newel = copy.deepcopy(el)
-                dest.shapes._spTree.insert_element_before(newel, 'p:extLst')
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            for shp in source.shapes:
+
+                if isinstance(shp, GroupShape):
+                    for grp_shape in shp.shapes:
+                        if isinstance(grp_shape, Picture):
+                            # Save image
+                            filepath = os.path.join(tmpdirname, grp_shape.name+'.jpg')
+                            with open(filepath, 'wb') as f:
+                                f.write(grp_shape.image.blob)
+                            # Add image path and size to dict `images`
+                            images[filepath] = [grp_shape.left, grp_shape.top, grp_shape.width, grp_shape.height]                        
+
+                if isinstance(shp, Picture):
+                    # Save image
+                    filepath = os.path.join(tmpdirname, shp.name+'.jpg')
+                    with open(filepath, 'wb') as f:
+                        f.write(shp.image.blob)
+                    # Add image path and size to dict `images`
+                    images[filepath] = [shp.left, shp.top, shp.width, shp.height]
+
+                
+
+                
+                # Add all other slide elements
+                if not isinstance(shp, GraphicFrame):
+                    el = shp.element
+                    newel = copy.deepcopy(el)
+                    dest.shapes._spTree.insert_element_before(newel, 'p:extLst')
+        
+            # Add images to new slide and remove from filesystem
+            for k, v in images.items():
+                dest.shapes.add_picture(k, v[0], v[1], v[2], v[3])
 
         return dest
 
