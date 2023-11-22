@@ -2,11 +2,13 @@ import os
 import copy
 import tempfile
 import traceback
+
+from pathlib import Path
 from pptx import Presentation
 from pptx.shapes.graphfrm import GraphicFrame
 from pptx.shapes.picture import Picture
 from pptx.shapes.group import GroupShape
-from pathlib import Path
+
 from common import create_text_chunks
 
 class PresentationManager(object):
