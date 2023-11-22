@@ -15,14 +15,14 @@ class PresentationManager(object):
 
     def __init__(self, file_path=None, template_slide_index=1):
         # Since presentation.Presentation class not intended to be constructed directly, using pptx.Presentation() to open presentation
-        if not file_path:
-            self.presentation = Presentation()
-            print("New presentation object loaded")
-        elif Path(file_path).exists():
+        if file_path and Path(file_path).exists():
             self.presentation = Presentation(file_path)
             print("Loaded presentation from:", file_path)
         else:
-            raise Exception(f"Could not load {file_path}")  
+            if file_path:
+                print(f"Could not load {file_path}")  
+            self.presentation = Presentation()
+            print("New presentation object loaded")
 
         # Setting index of slide to be used as a template
         self.template_slide_index = template_slide_index
@@ -55,9 +55,6 @@ class PresentationManager(object):
             traceback.print_exc()
 
         return
-
-    def copy_slide_to_other_presentation(self, index, destination):
-        return self.duplicate(index=index, destination=destination)
 
     def move_slide(self, old_index, new_index):
         slides = list(self.xml_slides)
@@ -109,7 +106,7 @@ class PresentationManager(object):
 
         # Create slides for each chunk of text
         for chunk in chunks:
-            slide_copy = self.duplicate_slide(self.template_slide_index)
+            slide_copy = self.duplicate(self.template_slide_index)
             i = self.presentation.slides.index(slide_copy)
             duplicate_indices.append(i)
             self.add_text_to_slide(i, chunk, title)
@@ -130,4 +127,17 @@ class PresentationManager(object):
         self.presentation.save(filepath)
         print("Saved presentation to:", filepath)
 
-
+    @classmethod
+    def copy_slide_to_other_presentation(cls, source, dest_filepath, slides_to_copy=[]):
+        destination = PresentationManager(dest_filepath)
+        if not slides_to_copy:
+            slides_to_copy = range(source.total_slides)
+        try:
+            for i in slides_to_copy:
+                duplicate_slide(source.presentation, i, destination.presentation)
+            destination.save(dest_filepath)
+            destination = Presentation(dest_filepath)
+            destination.save(dest_filepath)
+        except Exception:
+            traceback.print_exc()    
+                
