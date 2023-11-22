@@ -26,8 +26,7 @@ class PresentationManager(object):
 
         if slide_size:
             height, width = slide_size
-            self.presentation.slide_height = height
-            self.presentation.slide_width = width
+            self.set_slide_size(height, width)
 
         # Setting index of slide to be used as a template
         self.template_slide_index = template_slide_index
@@ -48,6 +47,10 @@ class PresentationManager(object):
     @property
     def total_slides(self):
         return len(self.presentation.slides)
+    
+    def set_slide_size(self, height, width):
+        self.presentation.slide_height = height
+        self.presentation.slide_width = width        
 
     def duplicate(self, index, destination=None):
         """
@@ -134,13 +137,19 @@ class PresentationManager(object):
 
     @classmethod
     def copy_slide_to_other_presentation(cls, source, dest_filepath, slides_to_copy=[]):
-        height, width = source.presentation.slide_height, source.presentation.slide_width
-        destination = PresentationManager(dest_filepath, slide_size=(height, width))
+        # Load presentation
+        destination = PresentationManager(dest_filepath)
+        # Copy presentation size if destination is empty
+        if destination.total_slides == 0:
+            height, width = source.presentation.slide_height, source.presentation.slide_width
+            destination.set_slide_size(height, width)
+        # If no slide numbers given, default to all slides
         if not slides_to_copy:
             slides_to_copy = range(source.total_slides)
         try:
             for i in slides_to_copy:
                 duplicate_slide(source.presentation, i, destination.presentation)
+            # Save twice to avoid corruption bug
             destination.save(dest_filepath)
             destination = Presentation(dest_filepath)
             destination.save(dest_filepath)
