@@ -13,7 +13,7 @@ class PresentationManager(object):
     # Character limit for content text in single slide
     MAX_CONTENT_LIMIT=2250
 
-    def __init__(self, file_path=None, template_slide_index=1):
+    def __init__(self, file_path=None, template_slide_index=1, slide_size=()):
         # Since presentation.Presentation class not intended to be constructed directly, using pptx.Presentation() to open presentation
         if file_path and Path(file_path).exists():
             self.presentation = Presentation(file_path)
@@ -23,6 +23,11 @@ class PresentationManager(object):
                 print(f"Could not load {file_path}")  
             self.presentation = Presentation()
             print("New presentation object loaded")
+
+        if slide_size:
+            height, width = slide_size
+            self.presentation.slide_height = height
+            self.presentation.slide_width = width
 
         # Setting index of slide to be used as a template
         self.template_slide_index = template_slide_index
@@ -129,7 +134,8 @@ class PresentationManager(object):
 
     @classmethod
     def copy_slide_to_other_presentation(cls, source, dest_filepath, slides_to_copy=[]):
-        destination = PresentationManager(dest_filepath)
+        height, width = source.presentation.slide_height, source.presentation.slide_width
+        destination = PresentationManager(dest_filepath, slide_size=(height, width))
         if not slides_to_copy:
             slides_to_copy = range(source.total_slides)
         try:
