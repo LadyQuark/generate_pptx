@@ -26,7 +26,7 @@ class PresentationManager(object):
 
         if slide_size:
             height, width = slide_size
-            self.presentation.set_slide_size(height, width)
+            self.set_slide_size(height, width)
 
         # Setting index of slide to be used as a template
         self.template_slide_index = template_slide_index
