@@ -55,11 +55,11 @@ class PresentationManager(object):
         """
         destination = destination or self
         try:
-            duplicate_slide(self.presentation, index, destination.presentation)
+            slide = duplicate_slide(self.presentation, index, destination.presentation)
         except Exception:
             traceback.print_exc()
 
-        return
+        return slide
 
     def move_slide(self, old_index, new_index):
         slides = list(self.xml_slides)
