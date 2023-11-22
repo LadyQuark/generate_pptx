@@ -10,6 +10,7 @@ from pptx.shapes.picture import Picture
 from pptx.shapes.group import GroupShape
 
 from common import create_text_chunks
+from utils import copy_shapes, remove_shape, _object_rels
 
 class PresentationManager(object):
     """Contains Presentation object and functions to manage it"""
@@ -63,42 +64,29 @@ class PresentationManager(object):
         blank_slide_layout = destination._blank_slide_layout
         dest = destination.presentation.slides.add_slide(blank_slide_layout)
 
-        # Creates empty list and empty folder `temp` in project
-        images = {}
+        # Remove all shapes from the default layout
+        for shape in dest.shapes:
+            remove_shape(shape)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            for shp in source.shapes:
+        # Copy all existing shapes
+        copy_shapes(source.shapes, dest)
 
-                if isinstance(shp, GroupShape):
-                    for grp_shape in shp.shapes:
-                        if isinstance(grp_shape, Picture):
-                            # Save image
-                            filepath = os.path.join(tmpdirname, grp_shape.name+'.jpg')
-                            with open(filepath, 'wb') as f:
-                                f.write(grp_shape.image.blob)
-                            # Add image path and size to dict `images`
-                            images[filepath] = [grp_shape.left, grp_shape.top, grp_shape.width, grp_shape.height]                        
+        # Copy existing references of known type
+        # e.g. hyperlinks
+        known_refs = [
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        ]
+        for rel in _object_rels(source.part):
+            if rel.reltype in known_refs:
+                if rel.is_external:
+                    dest.part.rels.get_or_add_ext_rel(rel.reltype, rel._target)
+                else:
+                    dest.part.rels.get_or_add(rel.reltype, rel._target)
 
-                if isinstance(shp, Picture):
-                    # Save image
-                    filepath = os.path.join(tmpdirname, shp.name+'.jpg')
-                    with open(filepath, 'wb') as f:
-                        f.write(shp.image.blob)
-                    # Add image path and size to dict `images`
-                    images[filepath] = [shp.left, shp.top, shp.width, shp.height]
-
-                
-
-                
-                # Add all other slide elements
-                if not isinstance(shp, GraphicFrame):
-                    el = shp.element
-                    newel = copy.deepcopy(el)
-                    dest.shapes._spTree.insert_element_before(newel, 'p:extLst')
-        
-            # Add images to new slide and remove from filesystem
-            for k, v in images.items():
-                dest.shapes.add_picture(k, v[0], v[1], v[2], v[3])
+        # Copy all existing shapes
+        if source.has_notes_slide:
+            txt = source.notes_slide.notes_text_frame.text
+            dest.notes_slide.notes_text_frame.text = txt
 
         return dest
 
