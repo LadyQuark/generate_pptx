@@ -116,7 +116,7 @@ def copy_shapes(source, dest):
             result.crop_bottom = shape.crop_bottom
         elif hasattr(shape, "has_chart") and shape.has_chart:
             result = clone_chart(shape, dest)
-        elif isinstance(shape, GraphicFrame) and not shape.shape_type:
+        elif "Diagram" in shape.name:
             # Ignore if shape contains SmartArt
             continue
         else:
