@@ -1,6 +1,7 @@
 import os
 import copy
 import tempfile
+import traceback
 from pptx import Presentation
 from pptx.shapes.graphfrm import GraphicFrame
 from pptx.shapes.picture import Picture
@@ -14,16 +15,21 @@ class PresentationManager(object):
     # Character limit for content text in single slide
     MAX_CONTENT_LIMIT=2250
 
-    def __init__(self, file_path=None, template_slide_index=1):
+    def __init__(self, file_path=None, template_slide_index=1, slide_size=()):
         # Since presentation.Presentation class not intended to be constructed directly, using pptx.Presentation() to open presentation
-        if not file_path:
-            self.presentation = Presentation()
-            print("New presentation object loaded")
-        elif Path(file_path).exists():
+        if file_path and Path(file_path).exists():
             self.presentation = Presentation(file_path)
             print("Loaded presentation from:", file_path)
         else:
-            raise Exception(f"Could not load {file_path}")  
+            if file_path:
+                print(f"Could not load {file_path}")  
+            self.presentation = Presentation()
+            print("New presentation object loaded")
+
+        if slide_size:
+            height, width = slide_size
+            self.presentation.slide_height = height
+            self.presentation.slide_width = width
 
         # Setting index of slide to be used as a template
         self.template_slide_index = template_slide_index
@@ -94,9 +100,6 @@ class PresentationManager(object):
 
         return dest
 
-    def copy_slide_to_other_presentation(self, index, destination):
-        return self.duplicate_slide(index=index, destination=destination)
-
     def move_slide(self, old_index, new_index):
         slides = list(self.xml_slides)
         self.xml_slides.remove(slides[old_index])
@@ -159,7 +162,7 @@ class PresentationManager(object):
             new_index += 1
 
 
-    def save(self, filepath, remove_template=True):
+    def save(self, filepath, remove_template=False):
         """Saves presentation to given filepath and removes slide used as template"""
 
         if remove_template:
@@ -169,3 +172,17 @@ class PresentationManager(object):
         print("Saved presentation to:", filepath)
 
 
+    @classmethod
+    def copy_slide_to_other_presentation(cls, source, dest_filepath, slides_to_copy=[]):
+        height, width = source.presentation.slide_height, source.presentation.slide_width
+        destination = PresentationManager(dest_filepath, slide_size=(height, width))
+        if not slides_to_copy:
+            slides_to_copy = range(source.total_slides)
+        try:
+            for i in slides_to_copy:
+                source.duplicate_slide(i, destination)
+            destination.save(dest_filepath)
+            destination = Presentation(dest_filepath)
+            destination.save(dest_filepath)
+        except Exception:
+            traceback.print_exc()   
