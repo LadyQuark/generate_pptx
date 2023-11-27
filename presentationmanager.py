@@ -5,7 +5,7 @@ import traceback
 from pptx import Presentation
 from utils import duplicate_slide
 from pathlib import Path
-from common import create_text_chunks
+from common import create_text_chunks, find_and_replace_diagrams
 
 class PresentationManager(object):
     """Contains Presentation object and functions to manage it"""
@@ -35,6 +35,9 @@ class PresentationManager(object):
         layout_items_count = [len(layout.placeholders) for layout in self.presentation.slide_layouts]
         min_items = min(layout_items_count)
         self.blank_layout_id = layout_items_count.index(min_items)
+
+        for slide in self.presentation.slides:
+            find_and_replace_diagrams(slide)        
 
     @property
     def xml_slides(self):
