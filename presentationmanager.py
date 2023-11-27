@@ -9,7 +9,7 @@ from pptx.shapes.graphfrm import GraphicFrame
 from pptx.shapes.picture import Picture
 from pptx.shapes.group import GroupShape
 
-from common import create_text_chunks
+from common import create_text_chunks, find_and_replace_diagrams
 from utils import copy_shapes, remove_shape, _object_rels
 
 class PresentationManager(object):
@@ -40,6 +40,9 @@ class PresentationManager(object):
         layout_items_count = [len(layout.placeholders) for layout in self.presentation.slide_layouts]
         min_items = min(layout_items_count)
         self.blank_layout_id = layout_items_count.index(min_items)
+
+        for slide in self.presentation.slides:
+            find_and_replace_diagrams(slide)
 
     @property
     def xml_slides(self):
