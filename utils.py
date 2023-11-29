@@ -120,7 +120,8 @@ def copy_shapes(source, dest):
         elif "Diagram" in shape.name:
             # Ignore if shape contains SmartArt
             continue
-        elif shape.shape_type in [MSO_SHAPE_TYPE.LINKED_OLE_OBJECT, MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT]:
+        # elif shape.shape_type in [MSO_SHAPE_TYPE.LINKED_OLE_OBJECT, MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT]:
+        elif shape.shape_type == MSO_SHAPE_TYPE.LINKED_OLE_OBJECT:
             continue
         else:
             import copy
