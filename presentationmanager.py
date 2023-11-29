@@ -1,15 +1,9 @@
-import os
-import copy
-import tempfile
 import traceback
 
 from pathlib import Path
 from pptx import Presentation
-from pptx.shapes.graphfrm import GraphicFrame
-from pptx.shapes.picture import Picture
-from pptx.shapes.group import GroupShape
 
-from common import create_text_chunks, find_and_replace_diagrams
+from common import create_text_chunks, find_and_replace_diagrams, find_and_replace_OLE_photos, find_and_replace_OLE, print_shape_type
 from utils import copy_shapes, remove_shape, _object_rels
 
 class PresentationManager(object):
@@ -43,6 +37,8 @@ class PresentationManager(object):
 
         for slide in self.presentation.slides:
             find_and_replace_diagrams(slide)
+            find_and_replace_OLE_photos(slide)
+            # find_and_replace_OLE(slide)
 
     @property
     def xml_slides(self):
@@ -81,6 +77,7 @@ class PresentationManager(object):
         # e.g. hyperlinks
         known_refs = [
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject"
         ]
         for rel in _object_rels(source.part):
             if rel.reltype in known_refs:
@@ -187,3 +184,11 @@ class PresentationManager(object):
             destination.save(dest_filepath)
         except Exception:
             traceback.print_exc()   
+
+
+    def _analyse_slide_elements(self, index, description=None):
+        slide = self.presentation.slides[index]
+        if description:
+            print("*"*40, description, "*" * 40, sep="\n")
+        for shape in slide.shapes:
+            print_shape_type(shape)

@@ -1,4 +1,5 @@
 # Modified from: https://gist.github.com/Dasc3er/2af5069afb728c39d54434cb28a1dbb8
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 def _object_rels(obj):
     try:
@@ -116,8 +117,10 @@ def copy_shapes(source, dest):
             result.crop_bottom = shape.crop_bottom
         elif hasattr(shape, "has_chart") and shape.has_chart:
             result = clone_chart(shape, dest)
-        elif isinstance(shape, GraphicFrame) and not shape.shape_type:
+        elif "Diagram" in shape.name:
             # Ignore if shape contains SmartArt
+            continue
+        elif shape.shape_type in [MSO_SHAPE_TYPE.LINKED_OLE_OBJECT, MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT]:
             continue
         else:
             import copy
@@ -151,6 +154,7 @@ def duplicate_slide(ppt, slide_index: int, dest_ppt=None):
     # e.g. hyperlinks
     known_refs = [
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject"
     ]
     for rel in _object_rels(source.part):
         if rel.reltype in known_refs:
