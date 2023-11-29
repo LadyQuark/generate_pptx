@@ -3,9 +3,10 @@ import copy
 import tempfile
 import traceback
 from pptx import Presentation
+from pptx.shapes.group import GroupShape
 from utils import duplicate_slide
 from pathlib import Path
-from common import create_text_chunks, find_and_replace_diagrams
+from common import create_text_chunks, find_and_replace_diagrams, print_shape_type, find_and_replace_OLE_photos, find_and_replace_OLE
 
 class PresentationManager(object):
     """Contains Presentation object and functions to manage it"""
@@ -37,7 +38,9 @@ class PresentationManager(object):
         self.blank_layout_id = layout_items_count.index(min_items)
 
         for slide in self.presentation.slides:
-            find_and_replace_diagrams(slide)        
+            find_and_replace_diagrams(slide) 
+            find_and_replace_OLE_photos(slide)       
+            # find_and_replace_OLE(slide)       
 
     @property
     def xml_slides(self):
@@ -158,4 +161,11 @@ class PresentationManager(object):
             destination.save(dest_filepath)
         except Exception:
             traceback.print_exc()    
-                
+
+
+    def _analyse_slide_elements(self, index, description=None):
+        slide = self.presentation.slides[index]
+        if description:
+            print("*"*40, description, "*" * 40, sep="\n")
+        for shape in slide.shapes:
+            print_shape_type(shape)

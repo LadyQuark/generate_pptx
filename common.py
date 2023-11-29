@@ -1,7 +1,10 @@
+from io import BytesIO
 from lxml import etree
 from lxml.etree import Element, SubElement
 from pptx.oxml import parse_xml
 from pptx.shapes.autoshape import Shape
+from pptx.shapes.group import GroupShape
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -30,6 +33,89 @@ def create_text_chunks(text, max_chunk_size=2250):
     
     return chunks
 
+
+def find_and_replace_diagrams(slide):
+    # Collect all diagrams in slide
+    diagrams = []
+    for shape in slide.shapes:
+        if "Diagram" in shape.name:
+            diagrams.append(shape)
+
+    for diagram in diagrams:
+        # Get matching source XML for diagram
+        drawing_xml = get_drawing_xml(diagram)
+        xfrm = []
+        # xfrm = get_xfrm(diagram)
+        # Remove diagram
+        parent = diagram.element.getparent()
+        parent.remove(diagram.element)
+        # Get id number for next group shape
+        # group_id = get_next_id(slide)
+        next_id = slide.shapes._next_shape_id
+        group_id = next_id
+        # Make Shape objects
+        new_shape_objects = shapes_from_drawing(drawing_xml, group_id + 1, parent)
+        # Create new groupShape, attach shape objects, attach to slide
+        add_group_to_slide(slide, group_id, new_shape_objects, xfrm)
+
+
+def find_and_replace_OLE_photos(slide):
+    shapes = slide.shapes
+    # Collect all embedded OLE objects
+    ole_photo_objs = []
+    for shape in shapes:
+        if shape.shape_type == MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT:
+            if shape.ole_format.prog_id == "MSPhotoEd.3":
+                ole_photo_objs.append(shape)
+
+    for obj in ole_photo_objs:
+        # Get picture object
+        pic = obj.element.xpath(".//a:graphic/a:graphicData/*/*/p:oleObj/p:pic")[0]
+        # Edit id and name of picture
+        cNvPr = pic.xpath(".//p:nvPicPr/p:cNvPr")[0]
+        # next_id = get_next_id(slide)
+        next_id = slide.shapes._next_shape_id
+        cNvPr.set("name", "Picture " + str(next_id))
+        cNvPr.set("id", str(next_id))
+        # Insert picture
+        shapes._spTree.insert_element_before(pic, "p:extLst")
+        # Remove OLE object
+        parent = obj.element.getparent()
+        parent.remove(obj.element)
+
+def find_and_replace_OLE(slide):
+    ole_photo_objs = []
+    for shape in slide.shapes:
+        if shape.shape_type == MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT:
+            if shape.ole_format.prog_id != "MSPhotoEd.3":
+                ole_photo_objs.append(shape)
+
+    for obj in ole_photo_objs:
+        nsmap = obj.element.nsmap
+        nsmap.update({"mc": "http://schemas.openxmlformats.org/markup-compatibility/2006"})
+        ole = obj.ole_format
+        try:
+            # ole_object = ole.element.xpath(".//*/*/p:oleObj")[0]
+            # ole_object = next(ole.element.iter(".//mc:AlternateContent/mc:Fallback/p:oleObj"))
+            a_blip = next(obj.element.iter("{%s}blip" % nsmap['a']))
+            rel_id = next(value for _, value in a_blip.attrib.items())
+        except StopIteration:
+            ole_object = next(ole.element.iter("{%s}oleObj" % nsmap['p']))
+            rel_id = ole_object.get("{%s}id" % ole_object.nsmap['r'])
+        # print(ole_object.xml)
+        embed = obj.part.rels[rel_id]._target._blob
+        # print(type(embed))
+        print(ole.prog_id)
+        slide.shapes.add_ole_object(
+            object_file=BytesIO(embed),
+            prog_id=ole.prog_id,
+            left=obj.left,
+            top=obj.top,
+        )
+        parent = obj.element.getparent()
+        parent.remove(obj.element)    
+
+
 def get_next_id(slide):
     max_id = 1
     for shape in slide.shapes:
@@ -51,28 +137,6 @@ def get_xfrm(diagram):
     return xfrm   
 
 
-def find_and_replace_diagrams(slide):
-    # Collect all diagrams in slide
-    diagrams = []
-    for shape in slide.shapes:
-        if "Diagram" in shape.name:
-            diagrams.append(shape)
-
-    for diagram in diagrams:
-        # Get matching source XML for diagram
-        drawing_xml = get_drawing_xml(diagram)
-        xfrm = []
-        # xfrm = get_xfrm(diagram)
-        # Remove diagram
-        parent = diagram.element.getparent()
-        parent.remove(diagram.element)
-        # Get id number for next group shape
-        group_id = get_next_id(slide)
-        # Make Shape objects
-        new_shape_objects = shapes_from_drawing(drawing_xml, group_id + 1, parent)
-        # Create new groupShape, attach shape objects, attach to slide
-        add_group_to_slide(slide, group_id, new_shape_objects, xfrm)
-    
 def shapes_from_drawing(drawing_xml, id_next, parent):
     new_shape_objects = []
 
@@ -105,7 +169,6 @@ def shapes_from_drawing(drawing_xml, id_next, parent):
     return new_shape_objects
 
 
-
 def add_group_to_slide(slide, group_id, shapes, xfrm=[]):
     P = "{%s}" % NS['p']
     new_group = slide.shapes.add_group_shape(shapes=shapes)
@@ -123,3 +186,19 @@ def add_group_to_slide(slide, group_id, shapes, xfrm=[]):
     
     if xfrm:
         grpSpPr.extend(xfrm)
+
+
+def print_shape_type(shape, indent=0):
+    shape_string = "\t" * indent + "{:<22s} | {:<25s} | {:<20s}".format(
+            shape.name, 
+            str(shape.shape_type),
+            type(shape).__name__,
+            )
+    if shape.shape_type == MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT:
+        shape_string += " | " + shape.ole_format.prog_id
+    print(shape_string)
+    if isinstance(shape, GroupShape):
+        indent += 1
+        for grp_shape in shape.shapes:
+            print_shape_type(grp_shape, indent) 
+    
