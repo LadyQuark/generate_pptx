@@ -1,9 +1,11 @@
+import re
 from io import BytesIO
 from lxml import etree
 from lxml.etree import Element, SubElement
 from pptx.oxml import parse_xml
 from pptx.shapes.autoshape import Shape
 from pptx.shapes.group import GroupShape
+from pptx.shapes.placeholder import PlaceholderGraphicFrame
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
@@ -38,12 +40,14 @@ def find_and_replace_diagrams(slide):
     # Collect all diagrams in slide
     diagrams = []
     for shape in slide.shapes:
-        if "Diagram" in shape.name:
+        if "Diagram" in shape.name or (isinstance(shape, PlaceholderGraphicFrame)):
             diagrams.append(shape)
 
     for diagram in diagrams:
         # Get matching source XML for diagram
         drawing_xml = get_drawing_xml(diagram)
+        if not drawing_xml:
+            continue
         xfrm = []
         # xfrm = get_xfrm(diagram)
         # Remove diagram
@@ -125,7 +129,7 @@ def get_next_id(slide):
 
 def get_drawing_xml(diagram):
     for _, rel in diagram.part.rels.items():
-        if rel.target_partname.endswith("drawing1.xml"):
+        if re.match(r".*drawing\d+\.xml$", rel.target_partname):
             drawing_xml = rel._target._blob    
             return drawing_xml   
 def get_xfrm(diagram):
@@ -159,7 +163,7 @@ def shapes_from_drawing(drawing_xml, id_next, parent):
         cNvPr = shape.find(".//p:nvSpPr/p:cNvPr", nsmap)
         cNvPr.set("id", str(id_next))
         id_next += 1
-        cNvPr.set("name", f"Freeform {id_next}")
+        cNvPr.set("name", f"Freeform {str(id_next)}")
         shape.set("has_ph_elm", "False")
         nvSpPr = shape.find(".//p:nvSpPr", nsmap)
         etree.SubElement(nvSpPr, etree.QName(nsmap['p'], "nvPr").text)     
