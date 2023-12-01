@@ -1,5 +1,6 @@
 import re
 from io import BytesIO
+from copy import deepcopy
 from lxml import etree
 from lxml.etree import Element, SubElement
 from pptx.oxml import parse_xml
@@ -14,6 +15,7 @@ NS = {'dgm': 'http://schemas.openxmlformats.org/drawingml/2006/diagram',
  'dsp': 'http://schemas.microsoft.com/office/drawing/2008/diagram',
  'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
  'p': 'http://schemas.openxmlformats.org/presentationml/2006/main'}
+
 
 def create_text_chunks(text, max_chunk_size=2250):
     chunks = []
@@ -48,19 +50,16 @@ def find_and_replace_diagrams(slide):
         drawing_xml = get_drawing_xml(diagram)
         if not drawing_xml:
             continue
-        xfrm = []
-        # xfrm = get_xfrm(diagram)
+        position = get_position(diagram)
         # Remove diagram
         parent = diagram.element.getparent()
         parent.remove(diagram.element)
         # Get id number for next group shape
-        # group_id = get_next_id(slide)
         next_id = slide.shapes._next_shape_id
-        group_id = next_id
         # Make Shape objects
-        new_shape_objects = shapes_from_drawing(drawing_xml, group_id + 1, parent)
+        new_shape_objects = shapes_from_drawing(drawing_xml, next_id, parent)
         # Create new groupShape, attach shape objects, attach to slide
-        add_group_to_slide(slide, group_id, new_shape_objects, xfrm)
+        add_group_to_slide(slide, new_shape_objects, position)
 
 
 def find_and_replace_OLE_photos(slide):
@@ -77,7 +76,6 @@ def find_and_replace_OLE_photos(slide):
         pic = obj.element.xpath(".//a:graphic/a:graphicData/*/*/p:oleObj/p:pic")[0]
         # Edit id and name of picture
         cNvPr = pic.xpath(".//p:nvPicPr/p:cNvPr")[0]
-        # next_id = get_next_id(slide)
         next_id = slide.shapes._next_shape_id
         cNvPr.set("name", "Picture " + str(next_id))
         cNvPr.set("id", str(next_id))
@@ -87,19 +85,21 @@ def find_and_replace_OLE_photos(slide):
         parent = obj.element.getparent()
         parent.remove(obj.element)
 
+
 def find_and_replace_OLE(slide):
-    ole_photo_objs = []
+    ole_objs = []
     for shape in slide.shapes:
         if shape.shape_type == MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT:
             if shape.ole_format.prog_id != "MSPhotoEd.3":
-                ole_photo_objs.append(shape)
+                ole_objs.append(shape)
 
-    for obj in ole_photo_objs:
+    for obj in ole_objs:
+        # Get namespaces
         nsmap = obj.element.nsmap
         nsmap.update({"mc": "http://schemas.openxmlformats.org/markup-compatibility/2006"})
-        left, top = obj.left, obj.top
+
+        # Get relationship ID associated with embedded OLE object
         ole = obj.ole_format
-        prog_id = ole.prog_id
         try:
             # ole_object = ole.element.xpath(".//*/*/p:oleObj")[0]
             # ole_object = next(ole.element.iter(".//mc:AlternateContent/mc:Fallback/p:oleObj"))
@@ -108,38 +108,53 @@ def find_and_replace_OLE(slide):
         except StopIteration:
             ole_object = next(ole.element.iter("{%s}oleObj" % nsmap['p']))
             rel_id = ole_object.get("{%s}id" % ole_object.nsmap['r'])
-        embed = obj.part.rels[rel_id]._target._blob
+            # print(ole_object.xml)
 
-        parent = obj.element.getparent()
-        parent.remove(obj.element)    
-        
+        # Get binary of embedded OLE object
+        embed = obj.part.rels[rel_id]._target._blob
+        print(ole.prog_id)
+
+        # Add new OLE object
         slide.shapes.add_ole_object(
             object_file=BytesIO(embed),
-            prog_id=prog_id,
-            left=left,
-            top=top,
+            prog_id=ole.prog_id,
+            left=obj.left,
+            top=obj.top,
         )
 
+        # Remove original OLE object
+        parent = obj.element.getparent()
+        parent.remove(obj.element)    
 
-def get_next_id(slide):
-    max_id = 1
-    for shape in slide.shapes:
-        if "Content Placeholder" not in shape.name:
-            max_id = max(max_id, shape.shape_id)
-    return max_id + 1
+
+# def get_next_id(slide):
+#     max_id = 1
+#     for shape in slide.shapes:
+#         if "Content Placeholder" not in shape.name:
+#             max_id = max(max_id, shape.shape_id)
+#     return max_id + 1
 
 def get_drawing_xml(diagram):
     for _, rel in diagram.part.rels.items():
         if re.match(r".*drawing\d+\.xml$", rel.target_partname):
             drawing_xml = rel._target._blob    
             return drawing_xml   
+        
 def get_xfrm(diagram):
     xfrm = []
-    for child in diagram.element.xpath("//p:xfrm"):
-        print(child.tag)
-        child.tag = "{%s}" % NS['a'] + "xfrm"
-        xfrm.append(child) 
+    el = diagram.element.xpath(".//p:xfrm")
+    for child in el:
+        new_child = deepcopy(child)
+        new_child.tag = "{%s}" % NS['a'] + "xfrm"
+        print(etree.tostring(new_child, pretty_print=True).decode())
+        xfrm.append(new_child) 
     return xfrm   
+
+def get_position(shape):
+    top, left = shape.top, shape.left
+    # print("Top:", top)
+    # print("Left:", left)
+    return top, left
 
 
 def shapes_from_drawing(drawing_xml, id_next, parent):
@@ -163,8 +178,8 @@ def shapes_from_drawing(drawing_xml, id_next, parent):
     for shape in shapes:
         cNvPr = shape.find(".//p:nvSpPr/p:cNvPr", nsmap)
         cNvPr.set("id", str(id_next))
-        id_next += 1
         cNvPr.set("name", f"Freeform {str(id_next)}")
+        id_next += 1
         shape.set("has_ph_elm", "False")
         nvSpPr = shape.find(".//p:nvSpPr", nsmap)
         etree.SubElement(nvSpPr, etree.QName(nsmap['p'], "nvPr").text)     
@@ -174,23 +189,28 @@ def shapes_from_drawing(drawing_xml, id_next, parent):
     return new_shape_objects
 
 
-def add_group_to_slide(slide, group_id, shapes, xfrm=[]):
+def add_group_to_slide(slide, shapes, position=None):
     P = "{%s}" % NS['p']
     new_group = slide.shapes.add_group_shape(shapes=shapes)
-    new_group.name = "Group " + str(group_id)
 
-    nvGrpSpPr   = SubElement(new_group.element, P + "nvGrpSpPr")
-    cNvPr       = SubElement(nvGrpSpPr, P + "cNvPr",
-                                attrib={
-                                    "id":   str(group_id),
-                                    "name": "Group " + str(group_id),
-                                })
-    cNvGrpSpPr  = SubElement(nvGrpSpPr, P + "cNvGrpSpPr")
-    nvPr        = SubElement(nvGrpSpPr, P + "nvPr")
-    grpSpPr     = SubElement(new_group.element, P + "grpSpPr")  
+    # nvGrpSpPr   = SubElement(new_group.element, P + "nvGrpSpPr")
+    # cNvPr       = SubElement(nvGrpSpPr, P + "cNvPr",
+    #                             attrib={
+    #                                 "id":   str(group_id),
+    #                                 "name": "Group " + str(group_id),
+    #                             })
+    # cNvGrpSpPr  = SubElement(nvGrpSpPr, P + "cNvGrpSpPr")
+    # nvPr        = SubElement(nvGrpSpPr, P + "nvPr")
+    # grpSpPr     = SubElement(new_group.element, P + "grpSpPr")  
     
-    if xfrm:
-        grpSpPr.extend(xfrm)
+    if position:
+        try:
+            top, left = position
+        except (TypeError, ValueError):
+            pass
+        else:
+            new_group.top = top
+            new_group.left = left
 
 
 def print_shape_type(shape, indent=0):

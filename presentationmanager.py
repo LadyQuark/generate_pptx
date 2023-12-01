@@ -13,7 +13,8 @@ class PresentationManager(object):
     MAX_CONTENT_LIMIT=2250
 
     def __init__(self, file_path=None, template_slide_index=1, slide_size=()):
-        # Since presentation.Presentation class not intended to be constructed directly, using pptx.Presentation() to open presentation
+        # Since presentation.Presentation class not intended to be constructed directly, 
+        # using pptx.Presentation() to open presentation
         if file_path and Path(file_path).exists():
             self.presentation = Presentation(file_path)
             print("Loaded presentation from:", file_path)
@@ -148,7 +149,7 @@ class PresentationManager(object):
             duplicate_indices.append(i)
             self.add_text_to_slide(i, chunk, title)
 
-        # Move all slides to just before template slide
+        # Move all slides to just after template slide
         new_index = self.template_slide_index + 1
         for old_index in duplicate_indices:
             self.move_slide(old_index, new_index)
