@@ -4,6 +4,7 @@ import tempfile
 import traceback
 from pptx import Presentation
 from pptx.shapes.group import GroupShape
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 from utils import duplicate_slide
 from pathlib import Path
 from common import create_text_chunks, find_and_replace_diagrams, print_shape_type, find_and_replace_OLE_photos, find_and_replace_OLE
@@ -18,11 +19,13 @@ class PresentationManager(object):
         # Since presentation.Presentation class not intended to be constructed directly, using pptx.Presentation() to open presentation
         if file_path and Path(file_path).exists():
             self.presentation = Presentation(file_path)
+            self.file_path = file_path
             print("Loaded presentation from:", file_path)
         else:
             if file_path:
                 print(f"Could not load {file_path}")  
             self.presentation = Presentation()
+            self.file_path = None
             print("New presentation object loaded")
 
         if slide_size:
@@ -169,3 +172,43 @@ class PresentationManager(object):
             print("*"*40, description, "*" * 40, sep="\n")
         for shape in slide.shapes:
             print_shape_type(shape)
+
+    def extract_all_text(self):
+        if not self.file_path:
+            raise Exception("No file path available")
+        docs = []
+        slide_texts = []
+
+        def get_text(shape):
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                group_text = []
+                for group_shape in shape.shapes:
+                    text = get_text(group_shape)
+                    if text:
+                        group_text.append(text)
+                return "\n".join(group_text)
+            
+            elif shape.has_text_frame:
+                lines = shape.text.split("\n")
+                text = "\n".join([line.strip() for line in lines if line.strip()])
+                return text
+            
+            return ""
+
+        for i, slide in enumerate(self.presentation.slides):
+            shapes = slide.shapes
+            title = shapes.title.text if shapes.title else ""
+            all_text = []
+            for item in shapes:
+                shape_text = get_text(item)
+                if shape_text:
+                    all_text.append(shape_text)
+            slide_texts.append({
+                "title": title,
+                "content": "\n".join(all_text),
+                "slide_id": slide.slide_id,
+                "slide_index": i,
+            })
+
+        return slide_texts
+    
