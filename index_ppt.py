@@ -1,56 +1,26 @@
-from dotenv import load_dotenv, find_dotenv
-from elasticsearch import Elasticsearch
+import pprint
 from elasticsearch.helpers import bulk, BulkIndexError
 from elasticsearch.exceptions import BadRequestError
-from functools import wraps
 from pathlib import Path
 from tqdm import tqdm
-import os
-import pprint
 
+from elastic import es, check_connection, INDEX, MAPPINGS, BATCH, REQUEST_TIMEOUT, MAX_RETRIES
 from presentationmanager import PresentationManager
 
 pp = pprint.PrettyPrinter(depth=6)  
-load_dotenv(find_dotenv())
-# Connect to Elasic Cloud
-ELASTIC_CLOUD_ID = os.getenv('ELASTIC_CLOUD_ID')
-ELASTIC_USER = os.getenv('ELASTIC_USER')
-ELASTIC_PASSWORD = os.getenv('ELASTIC_PASSWORD')
-REQUEST_TIMEOUT = 900
-MAX_RETRIES = 10
-BATCH = 1000
-if ELASTIC_CLOUD_ID:
-    es = Elasticsearch(
-        cloud_id=ELASTIC_CLOUD_ID,
-        basic_auth=(ELASTIC_USER, ELASTIC_PASSWORD),
-        max_retries=MAX_RETRIES, retry_on_timeout=True,
-        request_timeout=REQUEST_TIMEOUT
-    )
-else:
-    es = Elasticsearch(
-        "http://localhost:9200",
-        max_retries=MAX_RETRIES, retry_on_timeout=True,
-        request_timeout=REQUEST_TIMEOUT
-    )
-INDEX = "ppt"
-
-
-def check_connection(f):
-    @wraps(f)
-    def decorated_func(*args, **kwargs):
-        if es.ping():
-            return f(*args, **kwargs)
-        else:
-            raise Exception("Could not connect to ElasticSearch")
-    return decorated_func
+TEST_USER_ID = "65700cee327beccab31fc13b"
 
 @check_connection
 def delete_create_index(index=INDEX):
     
-    print("Deleting index")
-    es.options(ignore_status=404).indices.delete(index=index)
-    print("Creating index")
-    es.indices.create(index=index)
+    print("Deleting index:", index)
+    es.options(ignore_status=404).indices.delete(
+        index=index)
+    print("Creating index:", index)
+    es.indices.create(
+        index=index,
+        mappings=MAPPINGS
+        )
 
 @check_connection
 def index_batch(docs, index=INDEX):
@@ -110,10 +80,77 @@ def get_all_docs(folder_path):
         results = ppt.extract_all_text()
         for result in results:
             result.update({
-                "ppt": filepath_str
+                "user_id": TEST_USER_ID,
+                "root": folder_path,
+                "virtualFileName": filepath.name,
+                "originalFileName": filepath.name,                
             })
         docs.extend(results)
     return docs
+
+
+@check_connection
+def search_in_index(query,index=INDEX, size=10):
+    from_index = 0
+
+    try:
+        resp = es.search(
+                    index=index,
+                    size=size,
+                    from_=from_index,
+                    query={"bool": {
+                        "must": [
+                            {"match" : {
+                                "content": {
+                                    "query": query,
+                                    "fuzziness": "AUTO"
+                                }                        
+                            }},
+                            {"term": {
+                                "user_id": TEST_USER_ID
+                            }}                                    
+                        ]
+                    }},
+                    highlight={"fields": {
+                        "content": {}
+                        }},
+                )
+    except BadRequestError as e:
+        print(f"{e} at {index}")
+        return None
+    
+    return resp['hits']
+
+
+def _strip_document(data):
+    FIELDS = [
+        "user_id",
+        "title",
+        "content",    
+        "slide_id",
+        "slide_index",
+        "virtualFileName",
+        "originalFileName",
+        "root"
+    ]
+    OPTIONAL_FIELDS = [
+
+    ]  
+    try:
+        doc = {
+            key: data[key] for key in FIELDS
+        }
+    except KeyError as e:
+        raise Exception("Document missing field:", e)
+    
+    for key in OPTIONAL_FIELDS:
+        doc.update({
+            key: data[key]
+        })
+
+    return doc 
+
+
 
 @check_connection
 def print_all_docs(index=INDEX, start_index=0, size=10):
@@ -128,31 +165,6 @@ def print_all_docs(index=INDEX, start_index=0, size=10):
         start_index += size
         if start_index >= total:
             break
-
-@check_connection
-def search_in_index(query, index=INDEX, size=10):
-    from_index = 0
-
-    try:
-        resp = es.search(
-                    index=index,
-                    size=size,
-                    from_=from_index,
-                    query={"match" : {
-                        "content": {
-                            "query": query,
-                            "fuzziness": "AUTO"
-                            }                        
-                        }},
-                    highlight={"fields": {
-                        "content": {}
-                        }},
-                )
-    except BadRequestError as e:
-        print(f"{e} at {index}")
-        return None
-    
-    return resp['hits']
 
 
 def print_results(hits, show_highlights=True):
@@ -176,9 +188,11 @@ def print_results(hits, show_highlights=True):
                 if column:
                     break
         source = r['_source']
-        file = source["ppt"]
+        file = source["originalFileName"]
         i = str(source["slide_index"] + 1)
         if not column:
             first_line = source["content"].split("\n", maxsplit=1)[0]
             column = source["title"] if source["title"] != "" else first_line[:50]
         print("{:<35} {:<10s} {:s}".format(file, i, column))    
+
+
