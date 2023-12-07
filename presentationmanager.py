@@ -1,5 +1,6 @@
 import traceback
 from pathlib import Path
+from functools import cached_property
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -13,17 +14,21 @@ class PresentationManager(object):
     # Character limit for content text in single slide
     MAX_CONTENT_LIMIT=2250
 
-    def __init__(self, file_path=None, template_slide_index=1, slide_size=()):
+    def __init__(self, file_path=None, file=None, template_slide_index=1, slide_size=()):
         # Since presentation.Presentation class not intended to be constructed directly, using pptx.Presentation() to open presentation
-        if file_path and Path(file_path).exists():
+        self.file_path = None
+        
+        if file:
+            self.presentation = Presentation(file)
+            print("Loaded presentation:", file.filename)
+        elif file_path:
+            if not Path(file_path).exists():
+                raise Exception(f"File doesn't exist at {file_path}")
             self.presentation = Presentation(file_path)
             self.file_path = file_path
             print("Loaded presentation from:", file_path)
         else:
-            if file_path:
-                print(f"Could not load {file_path}")  
             self.presentation = Presentation()
-            self.file_path = None
             print("New presentation object loaded")
 
         if slide_size:
@@ -171,9 +176,13 @@ class PresentationManager(object):
         for shape in slide.shapes:
             print_shape_type(shape)
 
+    @cached_property
+    def title(self):
+        shapes = self.presentation.slides[0].shapes
+        title = shapes.title.text if shapes.title else f"Untitled"
+        return title
+
     def extract_all_text(self):
-        if not self.file_path:
-            raise Exception("No file path available")
         docs = []
         slide_texts = []
 
@@ -195,7 +204,7 @@ class PresentationManager(object):
 
         for i, slide in enumerate(self.presentation.slides):
             shapes = slide.shapes
-            title = shapes.title.text if shapes.title else ""
+            title = shapes.title.text if shapes.title else f"Untitled Slide {slide.slide_id}"
             all_text = []
             for item in shapes:
                 shape_text = get_text(item)
