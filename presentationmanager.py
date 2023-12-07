@@ -1,12 +1,10 @@
-import os
-import copy
-import tempfile
 import traceback
-from pptx import Presentation
-from pptx.shapes.group import GroupShape
-from pptx.enum.shapes import MSO_SHAPE_TYPE
-from utils import duplicate_slide
 from pathlib import Path
+
+from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+from utils import duplicate_slide
 from common import create_text_chunks, find_and_replace_diagrams, print_shape_type, find_and_replace_OLE_photos, find_and_replace_OLE
 
 class PresentationManager(object):
